@@ -21,6 +21,7 @@ class TestNSJSONSerialization : XCTestCase {
     
     var allTests : [(String, () -> ())] {
         return JSONObjectWithDataTests
+            + serializationTests
             + deserializationTests
             + isValidJSONObjectTests
     }
@@ -75,10 +76,146 @@ extension TestNSJSONSerialization {
 
 }
 
-//MARK: - JSONDeserialization
+//MARK: - JSONSerialization
 extension TestNSJSONSerialization {
     
     var deserializationTests: [(String, () -> ())] {
+        return [
+            ("test_serialize_emptyObject", test_serialize_emptyObject),
+            ("test_serialize_multiStringObject", test_serialize_multiStringObject),
+
+            ("test_serialize_emptyArray", test_serialize_emptyArray),
+            ("test_serialize_multiStringArray", test_serialize_multiStringArray),
+
+            ("test_serialize_values", test_serialize_values),
+            ("test_serialize_numbers", test_serialize_numbers),
+
+            ("test_serialize_simpleEscapeSequences", test_serialize_simpleEscapeSequences),
+        ]
+    }
+    
+    //MARK: - Object Serialization
+    func test_serialize_emptyObject() {
+        let subject = NSDictionary()
+        let expected = "{}"
+        do {
+            guard let expectedData = expected.bridge().dataUsingEncoding(NSUTF8StringEncoding) else {
+                XCTFail("Unable to convert string to data")
+                return
+            }
+            let result = try NSJSONSerialization.dataWithJSONObject(subject, options: [])
+            
+            XCTAssert(result.isEqualToData(expectedData))
+        } catch {
+            XCTFail("Error thrown: \(error)")
+        }
+    }
+    
+    func test_serialize_multiStringObject() {
+        let subject = ["hello":"world","swift":"rocks"]._bridgeToObject()
+        let expected = "{\"hello\":\"world\",\"swift\":\"rocks\"}"
+        do {
+            guard let expectedData = expected.bridge().dataUsingEncoding(NSUTF8StringEncoding) else {
+                XCTFail("Unable to convert string to data")
+                return
+            }
+            let result = try NSJSONSerialization.dataWithJSONObject(subject, options: [])
+            
+            XCTAssert(result.isEqualToData(expectedData))
+        } catch {
+            XCTFail("Error thrown: \(error)")
+        }
+    }
+    
+    //MARK: - Array Deserialization
+    func test_serialize_emptyArray() {
+        let subject = NSArray()
+        let expected = "[]"
+        do {
+            guard let expectedData = expected.bridge().dataUsingEncoding(NSUTF8StringEncoding) else {
+                XCTFail("Unable to convert string to data")
+                return
+            }
+            let result = try NSJSONSerialization.dataWithJSONObject(subject, options: [])
+            
+            XCTAssert(result.isEqualToData(expectedData))
+        } catch {
+            XCTFail("Error thrown: \(error)")
+        }
+    }
+    
+    func test_serialize_multiStringArray() {
+        let subject = ["hello", "swift⚡️"]._bridgeToObject()
+        let expected = "[\"hello\",\"swift⚡️\"]"
+        do {
+            guard let expectedData = expected.bridge().dataUsingEncoding(NSUTF8StringEncoding) else {
+                XCTFail("Unable to convert string to data")
+                return
+            }
+            let result = try NSJSONSerialization.dataWithJSONObject(subject, options: [])
+            
+            XCTAssert(result.isEqualToData(expectedData))
+        } catch {
+            XCTFail("Error thrown: \(error)")
+        }
+    }
+    
+    //MARK: - Value parsing
+    func test_serialize_values() {
+        let subject: NSArray = [NSNumber(integer: 45), NSNumber(float: 10.5), "hello"._bridgeToObject(), NSNull(), NSDictionary(), NSArray()]._bridgeToObject()
+        let expected = "[45,10.5,\"hello\",null,{},[]]"
+        do {
+            guard let expectedData = expected.bridge().dataUsingEncoding(NSUTF8StringEncoding) else {
+                XCTFail("Unable to convert string to data")
+                return
+            }
+            let result = try NSJSONSerialization.dataWithJSONObject(subject, options: [])
+            
+            XCTAssert(result.isEqualToData(expectedData))
+        } catch {
+            XCTFail("Error thrown: \(error)")
+        }
+    }
+    
+    //MARK: - Number parsing
+    func test_serialize_numbers() {
+        let subject: NSArray = [NSNumber(integer: 1), NSNumber(integer: -1), NSNumber(double: 1.3), NSNumber(double: -1.3)]._bridgeToObject()
+        let expected = "[1,-1,1.3,-1.3]"
+        do {
+            guard let expectedData = expected.bridge().dataUsingEncoding(NSUTF8StringEncoding) else {
+                XCTFail("Unable to convert string to data")
+                return
+            }
+            let result = try NSJSONSerialization.dataWithJSONObject(subject, options: [])
+            
+            XCTAssert(result.isEqualToData(expectedData))
+        } catch {
+            XCTFail("Error thrown: \(error)")
+        }
+    }
+    
+    //MARK: - Escape Sequences
+    func test_serialize_simpleEscapeSequences() {
+        let subject: NSArray = ["\"", "\\", "/", "\u{08}", "\u{0C}", "\u{0A}", "\u{0D}", "\u{09}"]._bridgeToObject()
+        let expected = "[\"\\\"\",\"\\\\\",\"\\/\",\"\\b\",\"\\f\",\"\\n\",\"\\r\",\"\\t\"]"
+        do {
+            guard let expectedData = expected.bridge().dataUsingEncoding(NSUTF8StringEncoding) else {
+                XCTFail("Unable to convert string to data")
+                return
+            }
+            let result = try NSJSONSerialization.dataWithJSONObject(subject, options: [])
+            
+            XCTAssert(result.isEqualToData(expectedData))
+        } catch {
+            XCTFail("Error thrown: \(error)")
+        }
+    }
+}
+
+//MARK: - JSONDeserialization
+extension TestNSJSONSerialization {
+    
+    var serializationTests: [(String, () -> ())] {
         return [
             ("test_deserialize_emptyObject", test_deserialize_emptyObject),
             ("test_deserialize_multiStringObject", test_deserialize_multiStringObject),

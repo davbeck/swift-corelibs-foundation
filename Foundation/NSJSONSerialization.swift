@@ -7,6 +7,8 @@
 // See http://swift.org/CONTRIBUTORS.txt for the list of Swift project authors
 //
 
+import CoreFoundation
+
 
 public struct NSJSONReadingOptions : OptionSetType {
     public let rawValue : UInt
@@ -93,7 +95,21 @@ public class NSJSONSerialization : NSObject {
     /* Generate JSON data from a Foundation object. If the object will not produce valid JSON then an exception will be thrown. Setting the NSJSONWritingPrettyPrinted option will generate JSON with whitespace designed to make the output more readable. If that option is not set, the most compact possible JSON will be generated. If an error occurs, the error parameter will be set and the return value will be nil. The resulting data is a encoded in UTF-8.
      */
     public class func dataWithJSONObject(obj: AnyObject, options opt: NSJSONWritingOptions) throws -> NSData {
-        NSUnimplemented()
+        guard obj is NSArray || obj is NSDictionary else {
+            throw NSError(domain: NSCocoaErrorDomain, code: NSCocoaError.PropertyListWriteInvalidError.rawValue, userInfo: [
+                "NSDebugDescription" : "Object is not a valid JSON object. The root object must be either NSArray or NSDictionary."
+            ])
+        }
+        
+        
+        let data = NSMutableData()
+        
+        try _writeJSONObject(obj, writeString: { (string) in
+            let encodedData = [UInt8](string.utf8)
+            data.appendBytes(encodedData, length: encodedData.count)
+        }, options: opt)
+        
+        return data
     }
     
     /* Create a Foundation object from JSON data. Set the NSJSONReadingAllowFragments option if the parser should allow top-level objects that are not an NSArray or NSDictionary. Setting the NSJSONReadingMutableContainers option will make the parser generate mutable NSArrays and NSDictionaries. Setting the NSJSONReadingMutableLeaves option will make the parser generate mutable NSString objects. If an error occurs during the parse, then the error parameter will be set and the result will be nil.
@@ -123,6 +139,98 @@ public class NSJSONSerialization : NSObject {
         NSUnimplemented()
     }
 }
+
+//MARK: - Serialization
+internal extension NSJSONSerialization {
+    enum EscapedCharacter: UnicodeScalar {
+        case Quotation = "\""
+        case ReverseSolidus = "\\"
+        case Solidus = "/"
+        case Backspace = "\u{08}"
+        case Formfeed = "\u{0C}"
+        case Newline = "\n"
+        case CariageReturn = "\r"
+        case Tab = "\t"
+    }
+    
+    final class func _writeJSONObject(obj: Any, @noescape writeString: (String) -> Void, options opt: NSJSONWritingOptions) throws {
+        if let string = obj as? NSString {
+            writeString("\"")
+            
+            for character in string._swiftObject.unicodeScalars {
+                let characterString: String
+                
+                if let escapedCharacter = EscapedCharacter(rawValue: character) {
+                    switch escapedCharacter {
+                    case .Quotation:
+                        characterString = "\\\""
+                    case .ReverseSolidus:
+                        characterString = "\\\\"
+                    case .Solidus:
+                        characterString = "\\/"
+                    case .Backspace:
+                        characterString = "\\b"
+                    case .Formfeed:
+                        characterString = "\\f"
+                    case .Newline:
+                        characterString = "\\n"
+                    case .CariageReturn:
+                        characterString = "\\r"
+                    case .Tab:
+                        characterString = "\\t"
+                    }
+                } else {
+                    characterString = String(character)
+                }
+                
+                writeString(characterString)
+            }
+            
+            writeString("\"")
+        } else if let number = obj as? NSNumber {
+            if CFNumberIsFloatType(number._cfObject) {
+                writeString(number.doubleValue.description)
+            } else {
+                writeString(number.longLongValue.description)
+            }
+            
+            // there is currently no way to represent boolean values in SwiftFoundation because CFNumber doesn't keep track of it and kCFBooleanTrue/False is unused and cannot be cast to NSNumber
+        } else if let array = obj as? NSArray {
+            writeString("[")
+            
+            for (index, subObj) in array.enumerate() {
+                if index > 0 {
+                    writeString(",")
+                }
+                
+                try self._writeJSONObject(subObj, writeString: writeString, options: opt)
+            }
+            
+            writeString("]")
+        } else if let dictionary = obj as? NSDictionary {
+            writeString("{")
+            
+            for (index, (key: key, value: value)) in dictionary.enumerate() {
+                if index > 0 {
+                    writeString(",")
+                }
+                
+                try self._writeJSONObject(key, writeString: writeString, options: opt)
+                writeString(":")
+                try self._writeJSONObject(value, writeString: writeString, options: opt)
+            }
+            
+            writeString("}")
+        } else if obj is NSNull {
+            writeString("null")
+        } else {
+            throw NSError(domain: NSCocoaErrorDomain, code: NSCocoaError.PropertyListWriteInvalidError.rawValue, userInfo: [
+                "NSDebugDescription" : "Object is not a valid JSON object. All objects must be instances of NSString, NSNumber, NSArray, NSDictionary, or NSNull."
+            ])
+        }
+    }
+}
+
 
 //MARK: - Deserialization
 internal extension NSJSONSerialization {
